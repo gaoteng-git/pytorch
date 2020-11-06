@@ -75,6 +75,7 @@ class Optimizer(object):
         return format_string
 
     def _step_wrapper(self):
+        """Wrap self.step under profiler. In order to avoid of instrumenting each sub-class."""
         func = self.step
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
