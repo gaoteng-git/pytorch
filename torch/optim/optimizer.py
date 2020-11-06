@@ -34,7 +34,7 @@ class Optimizer(object):
     def __init__(self, params, defaults):
         torch._C._log_api_usage_once("python.optimizer")
         self.defaults = defaults
-        self.step = self._step_wrapper()
+        self.step = self._step_with_profile(self.step)
 
         if isinstance(params, torch.Tensor):
             raise TypeError("params argument given to the optimizer should be "
@@ -74,13 +74,12 @@ class Optimizer(object):
         format_string += ')'
         return format_string
 
-    def _step_wrapper(self):
+    def _step_with_profile(self, func):
         """Wrap self.step under profiler. In order to avoid of instrumenting each sub-class."""
-        func = self.step
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            profile_label = str.format("{}#{}", func.__qualname__, "Optimizer.step")
-            with torch.autograd.profiler.record_function(profile_label):
+            name = str.format("{}#{}", func.__qualname__, "Optimizer.step")
+            with torch.autograd.profiler.record_function(name):
                 return func(*args, **kwargs)
         return wrapper
 
@@ -191,8 +190,8 @@ class Optimizer(object):
                 (in one case it does the step with a gradient of 0 and in the other it skips
                 the step altogether).
         """
-        profile_label = str.format("{}.{}#{}", self.__class__.__name__, "zero_grad", "Optimizer.zero_grad")
-        with torch.autograd.profiler.record_function(profile_label):
+        name = str.format("{}.{}#{}", self.__class__.__name__, "zero_grad", "Optimizer.zero_grad")
+        with torch.autograd.profiler.record_function(name):
             for group in self.param_groups:
                 for p in group['params']:
                     if p.grad is not None:

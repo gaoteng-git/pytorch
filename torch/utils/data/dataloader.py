@@ -514,8 +514,8 @@ class _BaseDataLoaderIter(object):
         raise NotImplementedError
 
     def __next__(self) -> Any:
-        profile_label = "_BaseDataLoaderIter.__next__#_BaseDataLoaderIter.__next__"
-        with torch.autograd.profiler.record_function(profile_label):
+        name = "_BaseDataLoaderIter.__next__#_BaseDataLoaderIter.__next__"
+        with torch.autograd.profiler.record_function(name):
             if self._sampler_iter is None:
                 self._reset()
             data = self._next_data()
