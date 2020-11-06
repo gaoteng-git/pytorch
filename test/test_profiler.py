@@ -4,6 +4,8 @@ import unittest
 
 import torch
 import torch.nn as nn
+import torch.optim
+import torch.utils.data
 from torch.testing._internal.common_utils import (
     TestCase, run_tests, TEST_WITH_ASAN, IS_WINDOWS)
 from torch.autograd.profiler import profile
@@ -99,6 +101,62 @@ class TestProfiler(TestCase):
 
         torch._C._set_graph_executor_optimize(prev_opt)
 
+class TestProfilePython(TestCase):
+    def test_python(self):
+        """Checks that python side high level events are recorded.
+        """
+        class RepeatedDataset(torch.utils.data.Dataset):
+            def __init__(self, N, D_in, D_out):
+                self.N = N
+                self.x = torch.randn(N, D_in)
+                self.y = torch.randn(N, D_out)
+
+            def __len__(self):
+                return self.N
+
+            def __getitem__(self, idx):
+                return self.x, self.y
+
+        class TwoLayerNet(torch.nn.Module):
+            def __init__(self, D_in, H, D_out):
+                super(TwoLayerNet, self).__init__()
+                self.linear1 = torch.nn.Linear(D_in, H)
+                self.linear2 = torch.nn.Linear(H, D_out)
+
+            def forward(self, x):
+                h_relu = self.linear1(x).clamp(min=0)
+                y_pred = self.linear2(h_relu)
+                return y_pred
+
+        N, D_in, H, D_out = 8, 10, 5, 2
+        model = TwoLayerNet(D_in, H, D_out)
+        criterion = torch.nn.MSELoss(reduction='sum')
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-4)
+
+        ds = RepeatedDataset(N, D_in, D_out)
+        dataloader = torch.utils.data.DataLoader(ds, batch_size=1)
+        with profile() as prof:
+            for t, data in enumerate(dataloader):
+                x, y = data[0], data[1]
+                y_pred = model(x)
+                loss = criterion(y_pred, y)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        cnt_dataloader_next = 0
+        cnt_optimizer_step = 0
+        cnt_optimizer_zerograd = 0
+        for e in prof.function_events:
+            if e.name == "_BaseDataLoaderIter.__next__#_BaseDataLoaderIter.__next__":
+                cnt_dataloader_next += 1
+            elif e.name == "SGD.step#Optimizer.step":
+                cnt_optimizer_step += 1
+            elif e.name == "SGD.zero_grad#Optimizer.zero_grad":
+                cnt_optimizer_zerograd += 1
+        self.assertTrue(cnt_dataloader_next == N + 1) # The final iteration will skip the loop body.
+        self.assertTrue(cnt_optimizer_step == N)
+        self.assertTrue(cnt_optimizer_zerograd == N)
 
 if __name__ == '__main__':
     run_tests()
