@@ -101,7 +101,6 @@ class TestProfiler(TestCase):
 
         torch._C._set_graph_executor_optimize(prev_opt)
 
-class TestProfilePython(TestCase):
     def test_python(self):
         """Checks that python side high level events are recorded.
         """
@@ -128,15 +127,8 @@ class TestProfilePython(TestCase):
                 y_pred = self.linear2(h_relu)
                 return y_pred
 
-        N, D_in, H, D_out = 8, 10, 5, 2
-        model = TwoLayerNet(D_in, H, D_out)
-        criterion = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.SGD(model.parameters(), lr=1e-4)
-
-        ds = RepeatedDataset(N, D_in, D_out)
-        dataloader = torch.utils.data.DataLoader(ds, batch_size=1)
-        with profile() as prof:
-            for t, data in enumerate(dataloader):
+        def train():
+            for _, data in enumerate(dataloader):
                 x, y = data[0], data[1]
                 y_pred = model(x)
                 loss = criterion(y_pred, y)
@@ -144,19 +136,36 @@ class TestProfilePython(TestCase):
                 loss.backward()
                 optimizer.step()
 
-        cnt_dataloader_next = 0
-        cnt_optimizer_step = 0
-        cnt_optimizer_zerograd = 0
+        N, D_in, H, D_out = 8, 10, 5, 2
+        model = TwoLayerNet(D_in, H, D_out)
+        criterion = torch.nn.MSELoss(reduction='sum')
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-4)
+        ds = RepeatedDataset(N, D_in, D_out)
+        dataloader = torch.utils.data.DataLoader(ds, batch_size=1)
+
+        try:
+            train()
+        except:
+            self.assertTrue(False, "Expected no exception without profiling.")
+
+        with profile() as prof:
+            train()
+
+        expected_event_count = {
+            # "+1" because the final iteration will enter __next__ but skip the loop body.
+            "_BaseDataLoaderIter.__next__":N + 1,
+            "Optimizer.step":N,
+            "Optimizer.zero_grad":N
+            }
+        actual_event_count = {}
         for e in prof.function_events:
-            if e.name == "_BaseDataLoaderIter.__next__#_BaseDataLoaderIter.__next__":
-                cnt_dataloader_next += 1
-            elif e.name == "SGD.step#Optimizer.step":
-                cnt_optimizer_step += 1
-            elif e.name == "SGD.zero_grad#Optimizer.zero_grad":
-                cnt_optimizer_zerograd += 1
-        self.assertTrue(cnt_dataloader_next == N + 1) # The final iteration will skip the loop body.
-        self.assertTrue(cnt_optimizer_step == N)
-        self.assertTrue(cnt_optimizer_zerograd == N)
+            if "#" in e.name:
+                parts = e.name.split("#")
+                key = parts[1]
+                if key in expected_event_count.keys():
+                    actual_event_count[key] = actual_event_count.get(key, 0) + 1
+        for key, count in expected_event_count.items():
+            self.assertTrue((key in actual_event_count.keys()) and (count == actual_event_count[key]))
 
 if __name__ == '__main__':
     run_tests()
