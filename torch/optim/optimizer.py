@@ -78,7 +78,7 @@ class Optimizer(object):
         """Wrap self.step under profiler. In order to avoid of instrumenting each sub-class."""
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            name = str.format("{}#{}", func.__qualname__, "Optimizer.step")
+            name = str.format("{}#{}", "Optimizer.step", func.__qualname__)
             with torch.autograd.profiler.record_function(name):
                 return func(*args, **kwargs)
         return wrapper
@@ -190,7 +190,7 @@ class Optimizer(object):
                 (in one case it does the step with a gradient of 0 and in the other it skips
                 the step altogether).
         """
-        name = str.format("{}.{}#{}", self.__class__.__name__, "zero_grad", "Optimizer.zero_grad")
+        name = str.format("{}#{}.{}", "Optimizer.zero_grad", self.__class__.__name__, "zero_grad")
         with torch.autograd.profiler.record_function(name):
             for group in self.param_groups:
                 for p in group['params']:

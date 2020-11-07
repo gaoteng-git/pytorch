@@ -153,17 +153,16 @@ class TestProfiler(TestCase):
 
         expected_event_count = {
             # "+1" because the final iteration will enter __next__ but skip the loop body.
-            "_BaseDataLoaderIter.__next__":N + 1,
-            "Optimizer.step":N,
-            "Optimizer.zero_grad":N
+            "enumerate(DataLoader)#_SingleProcessDataLoaderIter.__next__":N + 1,
+            "Optimizer.step#SGD.step":N,
+            "Optimizer.zero_grad#SGD.zero_grad":N
             }
         actual_event_count = {}
         for e in prof.function_events:
             if "#" in e.name:
-                parts = e.name.split("#")
-                key = parts[1]
+                key = e.name
                 if key in expected_event_count.keys():
-                    actual_event_count[key] = actual_event_count.get(key, 0) + 1
+                    actual_event_count[key] = actual_event_count.setdefault(key, 0) + 1
         for key, count in expected_event_count.items():
             self.assertTrue((key in actual_event_count.keys()) and (count == actual_event_count[key]))
 
