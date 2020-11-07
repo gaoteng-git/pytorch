@@ -153,9 +153,9 @@ class TestProfiler(TestCase):
 
         expected_event_count = {
             # "+1" because the final iteration will enter __next__ but skip the loop body.
-            "enumerate(DataLoader)#_SingleProcessDataLoaderIter.__next__":N + 1,
-            "Optimizer.step#SGD.step":N,
-            "Optimizer.zero_grad#SGD.zero_grad":N
+            "enumerate(DataLoader)#_SingleProcessDataLoaderIter.__next__": N + 1,
+            "Optimizer.step#SGD.step": N,
+            "Optimizer.zero_grad#SGD.zero_grad": N
             }
         actual_event_count = {}
         for e in prof.function_events:
