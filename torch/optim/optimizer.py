@@ -81,6 +81,9 @@ class Optimizer(object):
             name = str.format("{}#{}", "Optimizer.step", func.__qualname__)
             with torch.autograd.profiler.record_function(name):
                 return func(*args, **kwargs)
+        # _LRScheduler.__init__ needs these:
+        wrapper.__self__ = func.__self__
+        wrapper.__func__ = func.__func__
         return wrapper
 
     def state_dict(self):
