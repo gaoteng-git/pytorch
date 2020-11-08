@@ -78,7 +78,7 @@ class Optimizer(object):
         """Wrap self.step under profiler. In order to avoid of instrumenting each sub-class."""
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            name = str.format("{}#{}", "Optimizer.step", func.__qualname__)
+            name = str.format("{}#{}.{}", "Optimizer.step", func.__self__.__class__.__name__, "step")
             with torch.autograd.profiler.record_function(name):
                 return func(*args, **kwargs)
         # _LRScheduler.__init__ needs these:
