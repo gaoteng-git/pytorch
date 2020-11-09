@@ -6,7 +6,6 @@ from copy import deepcopy
 from itertools import chain
 import warnings
 import functools
-import weakref
 
 
 class _RequiredParameter(object):
@@ -35,26 +34,7 @@ class Optimizer(object):
     def __init__(self, params, defaults):
         torch._C._log_api_usage_once("python.optimizer")
         self.defaults = defaults
-
-        # Input and output are all bound method.
-        # Make the output a bound method in order to support re-wrapped
-        # by with_counter in _LRScheduler.
-        def _step_with_profile(method):
-            """Wrap self.step under profiler. In order to avoid of instrumenting each sub-class."""
-            # Keep a weak reference to the optimizer instance to prevent cyclic references.
-            instance_ref = weakref.ref(method.__self__)
-            func = method.__func__
-            cls = instance_ref().__class__
-            del method
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs):
-                name = str.format("{}#{}.{}", "Optimizer.step", cls.__name__, "step")
-                with torch.autograd.profiler.record_function(name):
-                    return func(*args, **kwargs)
-            instance = instance_ref()
-            wrapper_method = wrapper.__get__(instance, cls)
-            return wrapper_method
-        self.step = _step_with_profile(self.step)
+        self.step = self._step_with_profile(self.step)
 
         if isinstance(params, torch.Tensor):
             raise TypeError("params argument given to the optimizer should be "
@@ -93,6 +73,18 @@ class Optimizer(object):
                     format_string += '    {0}: {1}\n'.format(key, group[key])
         format_string += ')'
         return format_string
+
+    def _step_with_profile(self, func):
+        """Wrap self.step under profiler. In order to avoid of instrumenting each sub-class."""
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            name = str.format("{}#{}.{}", "Optimizer.step", func.__self__.__class__.__name__, "step")
+            with torch.autograd.profiler.record_function(name):
+                return func(*args, **kwargs)
+        # _LRScheduler.__init__ needs these:
+        wrapper.__self__ = func.__self__
+        wrapper.__func__ = func.__func__
+        return wrapper
 
     def state_dict(self):
         r"""Returns the state of the optimizer as a :class:`dict`.
